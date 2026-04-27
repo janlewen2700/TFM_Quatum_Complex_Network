@@ -219,3 +219,8 @@ __marimo__/
 
 # Documentation and Output
 *.pdf
+
+#Coordinates and cache files
+*.edge
+*.gen_coord
+*.npz

@@ -80,10 +80,21 @@ def compute_load_eigenvalues(self, folder="../spectra", force=False, save=True):
     
 
     # --- ground state via sparse ---
-    ground_energy, ground_state = eigsh(H, k=1, which='SA')
-
-    ground_energy = ground_energy[0]
-    ground_state = ground_state[:, 0]
+    eigv_low, eigs_low = eigsh(H, k=2, which='SA')
+    _, eigs_max = eigsh(H, k=1, which='LA')
+    
+    mid_e = np.median(evals)
+    _, eigs_bulk = eigsh(H, k=1, which='LM', sigma=mid_e)
+    
+    ground_energy = eigv_low[0]
+    ground_state = eigs_low[:, 0]
+    
+    self.eigenstates = {
+        "vec0": eigs_low[:, 0],
+        "vec1": eigs_low[:, 1],
+        "bulk": eigs_bulk[:,0],
+        "max": eigs_max[:,0],
+    }
     
     #to be modified at the correct time so i can have some saying from the top.
     prob = np.abs(ground_state)**2
@@ -106,7 +117,7 @@ def compute_load_eigenvalues(self, folder="../spectra", force=False, save=True):
 
 
 
-def compute_ground_state_metrics(self, vec0, threshold, use_prob=True):
+def compute_ground_state_metrics(self, vec0, threshold=0.01, use_prob=True):
     """
     Compute localization/connectivity metrics for the ground state.
 
@@ -142,6 +153,8 @@ def compute_ground_state_metrics(self, vec0, threshold, use_prob=True):
     participation_number = 1.0 / ipr if ipr > 0 else 0.0
     participation_fraction = participation_number / N if N > 0 else 0.0
 
+    radius = compute_geometric_nature(self, values, threshold=threshold)
+
     # --- selected nodes ---
     selected = np.where(values > threshold)[0]
     n_selected = len(selected)
@@ -176,6 +189,9 @@ def compute_ground_state_metrics(self, vec0, threshold, use_prob=True):
         "participation_number": float(participation_number),
         "participation_fraction": float(participation_fraction),
 
+        #hyperbolic spread
+        "dif_radius": float(radius),
+        
         # thresholded support
         "n_selected": int(n_selected),
         "fraction_selected_nodes": float(n_selected / N) if N > 0 else 0.0,
@@ -240,6 +256,46 @@ def compute_ground_state_metrics(self, vec0, threshold, use_prob=True):
     
     return metrics
 
+def get_hyperbolic_distance(r1, theta1, r2, theta2):
+    """Computes the exact hyperbolic distance between two points."""
+    # cosh(d) = cosh(r1)cosh(r2) - sinh(r1)sinh(r2)cos(theta1-theta2)
+    # Clipping for numerical stability
+    arg = np.cosh(r1)*np.cosh(r2) - np.sinh(r1)*np.sinh(r2)*np.cos(theta1 - theta2)
+    return np.arccosh(np.maximum(1.0, arg))
+
+def compute_geometric_nature(self, probs, threshold=0.01):
+    """Computes the dispersion of the state using active nodes."""
+    
+    coords = self.coords.copy()
+    p = probs
+    idx_max = np.argmax(p)
+    p_max = p[idx_max]
+    r_max, th_max = coords.iloc[idx_max][['radius', 'theta']]
+    
+    
+    # Filter active nodes (at least 1% of max probability)
+    mask = p >= (threshold * p_max)
+    active_coords = coords[mask]
+    active_probs = p[mask]
+    
+    if len(active_coords) < 2:
+        return 0.0
+    
+    # Normalize probabilities of active nodes so they sum to 1
+    w = active_probs / np.sum(active_probs)
+    r = active_coords['radius'].values
+    th = active_coords['theta'].values
+    
+    # Compute pairwise distances (Vectorized as much as possible)
+    # For N_active ~ 100-500 nodes, this is very fast
+    dist_sum = 0
+    for i in range(len(r)):
+        # Distance from node i to all other active nodes
+        d_ij = get_hyperbolic_distance(r[i], th[i], r_max, th_max)
+        # Weight by the product of their probabilities
+        dist_sum += np.sum(d_ij * w[i])
+        
+    return dist_sum/ self.HypR
 
 
 
@@ -273,16 +329,24 @@ def compute_gap_ratio(self, remove_edges=0):
         
     return r, r_mean, deltas
     
-def compute_gap_ratio_unfolded(self, remove_edges=0.1, window_size=11):
-
-    evals, _, _ = self.compute_eigenvalues()
+def compute_gap_ratio_unfolded(self, density_threshold=0.05, window_size=11):
+    from scipy.stats import gaussian_kde
+    
+    evals = self._eigenvalues
     evals = np.sort(np.real(evals))
 
-    # ---- (ii) Remove edges ----
-    if remove_edges > 0:
-        num_to_remove = int(len(evals) * remove_edges)
-        bulk_evals = evals[num_to_remove:-num_to_remove].copy()
-        
+    #we take the bulk eigenvalues to avoid strange behavioiurs due to non-populated tails. Density check!
+    kde = gaussian_kde(evals, bw_method='silverman')
+    rho = kde(evals)
+    
+    # 2. Filter based on max density
+    rho_max = np.max(rho)
+    mask = rho > (rho_max * density_threshold)
+    bulk_evals = evals[mask]
+    
+    if len(bulk_evals) < window_size:
+        return np.array([])
+    
     raw_spacings = np.diff(bulk_evals)
     r = np.minimum(raw_spacings[1:], raw_spacings[:-1]) / np.maximum(raw_spacings[1:], raw_spacings[:-1])
     r_mean = np.mean(r)

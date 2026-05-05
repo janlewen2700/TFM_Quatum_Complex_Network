@@ -580,7 +580,7 @@ plot_mean_from_log(
     name="SD",
     savefile="../figures/means/rmean_vs_beta_byk.pdf"
 )
-"""
+
 
 plot_mean_from_log(
     logfile="../logs/log_ipr.csv",
@@ -594,13 +594,14 @@ plot_mean_from_log(
     #yscale="log",
     #savefile="../figures/means/ipr_vs_gamma_b1.01.pdf"
 )
+"""
 
 plot_mean_from_log(
-    logfile="../logs/log_ipr.csv",
+    logfile="../logs/log_sweep.csv",
     parameterx="gamma",
-    parametery="ipr",
+    parametery="gap_0",
     parameter_control = "beta",
-    control_val = 9.01,
+    control_val = 10.01,
     N_groups=[4000],
     rel_tol=0.10,
     name="SD",

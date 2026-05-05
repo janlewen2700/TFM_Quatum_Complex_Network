@@ -20,8 +20,8 @@ def main():
         #ut.RangeChainGraph(N, J, R=2, noise=noise, periodic=False),
         #ut.RangeChainGraph(N, J, R=3, noise=noise, periodic=False),
         #ut.RangeChainGraph(N, J, R=4, noise=noise, periodic=False),
-        #ut.SquareGraph(N, J, Lx=80, Ly=81, noise=noise, periodic=False),
-        #ut.CubicGraph(N, J, Lx=18, Ly=19, Lz=17, noise=noise, periodic=False),
+        #ut.SquareGraph(N, J, Lx=80, Ly=80, noise=noise, periodic=False),
+        #ut.CubicGraph(N, J, Lx=20, Ly=20, Lz=20, noise=noise, periodic=False),
         #ut.HyperbolicGraph(J=J, p=7, q=3, noise=noise, nlayers=7),
         #ut.HyperbolicGraph(J=J, p=3, q=7, noise=noise, nlayers=8),
         #try this in the cluster: ut.HyperbolicGraph(J=J, p=3, q=10, nlayers=8),
@@ -63,16 +63,18 @@ def main():
     #Real networks see what happens: geometric renormalization unravels self-fimilarity multiscale human connectome. navigable brain maps data zenodo. konect project network data/Icon networks database/Netzschleuder. Unipartide. Internet?
     
     dim=1
-    beta=1.61
-    gamma=2.01
-    mean_degree=15
-    num_samples=3
+    beta=10.01
+    mean_degree=[10,15,20,25,30,40]
+    num_samples=10
     nodes=[4000]
+    N=4000
     
-    for N in nodes:
-        while gamma < 6.01:
-            beta = 1.01
-            while beta < 9.02:
+    
+    for k in mean_degree:
+        gamma=2.01
+        while gamma < 8.02:
+            beta = 10.01
+            while beta < 10.02:
                 for i in range(num_samples):
 
                     g = ut.HyperbolicSD(
@@ -80,7 +82,7 @@ def main():
                         dim=dim,
                         beta=beta,
                         gamma=gamma,
-                        mean_degree=mean_degree,
+                        mean_degree=k,
                         output=f"../input/hyper_N_{N}_d_{dim}_b_{beta}_g_{gamma}_k_{mean_degree}_n_{noise}_{i}",
                         noise=noise,
                         it=i
@@ -89,13 +91,13 @@ def main():
                     
                     start_time = time.time()
                     # --- COMPUTE ---
-                    eigenvalues, E0, vec0 = g.compute_eigenvalues(folder="../spectra/SD", force=True, save=False)
+                    eigenvalues, E0, vec0 = g.compute_eigenvalues(folder="../spectra/SD", force=True, save=True)
 
-                    g.gap_ratio_unfolded(remove_edges=0.1, window_size=11)
+                    g.gap_ratio_unfolded(density_threshold=0.05, window_size=11)
                     g.compute_conden(fillings, T_min, T_max)
 
                     # --- SAVE ONLY WHAT YOU NEED ---
-                    g.append_network_log(filename="log_ipr.csv", dist_filename="dist_ipr.csv")
+                    g.append_network_log(filename="log_k_TC.csv", dist_filename="dist_k_TC.csv")
                     
                     end_time = time.time()
                     duration = end_time - start_time
@@ -114,7 +116,7 @@ def main():
     #This is a very unsuccesful structure, since i plot and compute, i should have this in different parts, save in the .log and later plot.
     
     #for g in graphs:
-        #eigenvalues, E0, vec0 = g.compute_eigenvalues(folder="../spectra/SD",force=False, save=False)
+        #eigenvalues, E0, vec0 = g.compute_eigenvalues(folder="../spectra",force=True, save=True)
         #print(f"Min = {eigenvalues.min()} and max = {eigenvalues.max()} eigenvalues of the spectra")
         #E_norm, IDOS = g.compute_idos(k=k)
         #idos_all[g.label] = (E_norm, IDOS)

@@ -3,6 +3,7 @@ import numpy as np
 import networkx as nx
 import os
 import matplotlib.pyplot as plt
+import pandas as pd
 
 import graph_gen as gg
 from hamiltonian import build_sparse_hamiltonian
@@ -63,9 +64,9 @@ class DeterministicGraph(BaseGraph):
         
         
     #unfolded spacings
-    def gap_ratio_unfolded(self, remove_edges=0.1, window_size=11):
+    def gap_ratio_unfolded(self, density_threshold=0.05, window_size=11):
     
-        return compute_gap_ratio_unfolded(self, remove_edges=remove_edges, window_size=window_size)
+        return compute_gap_ratio_unfolded(self, density_threshold=density_threshold, window_size=window_size)
     
     
     #plot spacings with mean gap ratio
@@ -153,12 +154,13 @@ class DeterministicGraph(BaseGraph):
         return os.path.join(folder, filename)
 
 
-    def append_network_log(self, folder="../logs", filename="log.csv", dist_filename="dist_log.csv"):
+    def append_network_log(self, folder="../logs", filename="log.csv", dist_filename="dist_log.csv", vec_folder="../logs/eigen"):
         import csv
         import os
         from datetime import datetime
 
         os.makedirs(folder, exist_ok=True)
+        os.makedirs(vec_folder, exist_ok=True)
         filepath = os.path.join(folder, filename)
         dist_filepath = os.path.join(folder, dist_filename)
         
@@ -170,7 +172,7 @@ class DeterministicGraph(BaseGraph):
         # --- Part A: Main Scalar Log ---
         fieldnames = [
             "run_id", "name", "N", "J", "noise", "periodic", "beta", "gamma",
-            "mean_degree", "first_moment", "second_moment", "r_mean", "dyson_beta", "alpha", "Tc", "gap0", "ipr", "participation_fraction",
+            "mean_degree", "HypR", "first_moment", "second_moment", "r_mean", "dyson_beta", "alpha", "Tc", "gap0", "ipr", "dif_radius", "participation_fraction",
             "avg_internal_degree", "n_components", "largest_component_fraction"
         ]
 
@@ -184,6 +186,7 @@ class DeterministicGraph(BaseGraph):
             "beta": getattr(self, "beta", None),
             "gamma": getattr(self, "gamma", None),
             "mean_degree": getattr(self, "mean_degree", None),
+            "HypR": getattr(self, "HypR", None),
             "first_moment": getattr(self, "first_moment", None),
             "second_moment": getattr(self, "second_moment", None),
             "r_mean": getattr(self, "r_mean", None),
@@ -192,6 +195,7 @@ class DeterministicGraph(BaseGraph):
             "Tc": getattr(self, "Tc", None),
             "gap0": getattr(self, "gap0", None),
             "ipr": metrics.get("ipr"),
+            "dif_radius": metrics.get("dif_radius"),
             "participation_fraction": metrics.get("participation_fraction"),
             "avg_internal_degree": metrics.get("avg_internal_degree"),
             "n_components": metrics.get("n_components"),
@@ -219,6 +223,23 @@ class DeterministicGraph(BaseGraph):
                 for deg, p_sum in deg_prob_map.items():
                     k_count = deg_node_count.get(deg, 1)
                     dist_writer.writerow([run_id, deg, p_sum, k_count])
+                
+        # --- Part C: Eigenstate Binary Log ---
+        # We save the raw vectors for vec0, vec1, bulk (middle), and max
+        vec_filename = f"{run_id}.npz"
+        vec_path = os.path.join(vec_folder, vec_filename)
+        
+        if hasattr(self, "eigenstates"):
+            np.savez_compressed(
+                vec_path,
+                vec0=self.eigenstates.get("vec0"),
+                vec1=self.eigenstates.get("vec1"),
+                bulk=self.eigenstates.get("bulk"),
+                vmax=self.eigenstates.get("max"),
+                radius=self.coords['radius'].values,
+                theta=self.coords['theta'].values,
+                degrees=np.array(self.degrees),
+            )
 
 
 
@@ -380,54 +401,6 @@ class RandomGraphEnsemble(BaseGraph):
         IDOS_avg /= self.num_samples
         return common_E, IDOS_avg
         
-#Deprecated class
-class WattsStrogatzEnsemble(RandomGraphEnsemble):
-
-    def __init__(self, N, J=1.0, num_samples=10, ws_k=4, ws_p=0.1, noise=0):
-        label = f"Watts–Strogatz k={ws_k}, p={ws_p} (avg)"
-        super().__init__("watts_strogatz", N, J,
-                         num_samples=num_samples,
-                         label=label,
-                         ws_k=ws_k, ws_p=ws_p, noise=noise)
-
-    def _generate_single_graph(self, noise=0):
-        ws_k = self.kwargs["ws_k"]
-        ws_p = self.kwargs["ws_p"]
-        G = nx.watts_strogatz_graph(self.N, ws_k, ws_p)
-
-        edges = [(i, j, self.J) for i, j in G.edges()]
-        if noise!=0:
-            epsilon = np.random.uniform(-noise, noise, size=N)
-        else:
-            epsilon = np.zeros(self.N)
-        return edges, epsilon
-
-
-
-#Deprecated class
-class HyperbolicNXEnsemble(RandomGraphEnsemble):
-
-    def __init__(self, N, J=1.0, num_samples=10, beta=2, gamma=2.7, mean_degree=10, noise=0):
-        label = f"geometric b={beta} g={gamma} k={mean_degree} (avg)"
-        super().__init__("geometric", N, J,
-                         num_samples=num_samples,
-                         label=label,
-                         beta=beta,
-                         gamma=gamma,
-                         mean_degree=mean_degree,
-                         noise=noise)
-                         
-    def _generate_single_graph(self, noise=0):
-        beta = self.kwargs.get("beta", 2)
-        gamma = self.kwargs.get("gamma", 2.7)
-        mean_degree = self.kwargs.get("mean_degree", 10)
-        G = nx.geometric_soft_configuration_graph(beta=beta, n=self.N, gamma=gamma, mean_degree=mean_degree)
-        edges = [(i,j,self.J) for i,j in G.edges()]
-        if noise!=0:
-            epsilon = np.random.uniform(-noise, noise, size=N)
-        else:
-            epsilon = np.zeros(self.N)
-        return edges, epsilon
 
 
 
@@ -469,40 +442,6 @@ class WattsStrogatz(DeterministicGraph):
             
             
         return edges, epsilon
-
-
-#Deprecated class
-class HyperbolicNX(DeterministicGraph):
-
-    def __init__(self, N, J=1.0, beta=3, gamma=1.5, mean_degree=10, noise=0):
-        label = f"hyperbolic beta={beta}, gamma={gamma}, mean_deg={mean_degree}"
-        self.beta=beta
-        self.gamma=gamma
-        self.mean_degree=mean_degree
-        super().__init__(N, J, noise=noise, label=label)
-
-    def _generate_graph(self):
-        G = nx.geometric_soft_configuration_graph(beta=self.beta, n=self.N, gamma=self.gamma, mean_degree=self.mean_degree)
-
-        degrees = [d for n, d in G.degree()]
-        max_deg = np.max(degrees)
-        avg_deg = np.mean(degrees)
-        
-        print(max_deg, avg_deg)
-        self.label += f" (k_max={max_deg}, k_avg={avg_deg:.2f})"
-
-        pos_dict = nx.circular_layout(G)
-        self.positions = np.array([pos_dict[i] for i in range(self.N)])
-        
-        
-        edges = [(i, j, self.J) for i, j in G.edges()]
-        if self.noise!=0:
-            epsilon = np.random.uniform(-self.noise, self.noise, size=self.N)
-        else:
-            epsilon = np.zeros(self.N)
-            
-            
-        return edges, epsilon
         
 
 
@@ -525,10 +464,8 @@ class HyperbolicSD(DeterministicGraph):
         import subprocess
         import os
         
-        #for statistics replace the seed with a given idea.
-        tries=0
-        while tries < 5:
-            tries+=1
+        #We loop in order to get a network with the significant amount of nodes
+        for _ in range(5):
             
             cmd = [
                 "./genSD",
@@ -545,47 +482,68 @@ class HyperbolicSD(DeterministicGraph):
             with open(os.devnull, "w") as fnull:
                 subprocess.run(cmd, stdout=fnull, stderr=fnull, check=True)
             
-            #os.system(" ".join(cmd))
-            
             G = nx.read_edgelist(f"{self.output}.edge")
             
             lcc_nodes = max(nx.connected_components(G), key=len)
             G = G.subgraph(lcc_nodes).copy()
             
-            G = nx.convert_node_labels_to_integers(G)
-            
-            # Update internal N to reflect LCC size
+
             N_real = G.number_of_nodes()
             print(f"LCC Size: {N_real}/{self.N}")
             
             if abs(N_real - self.N) / self.N <= 0.1:
                 break
             
+        old_N=self.N
         self.N=N_real
         
-        degrees = [d for n, d in G.degree()]
-        max_deg = np.max(degrees)
-        avg_deg = np.mean(degrees)
-        second_moment = np.mean(np.square(degrees))
+        #we relabel the nodes and add the coordinates for future working
+        G = nx.convert_node_labels_to_integers(G, label_attribute="original_id")
+        raw_coords = pd.read_csv(f"{self.output}.gen_coord", sep=r"\s+",
+                                 names=['vertex', 'kappa', 'radius', 'theta', 'real_deg', 'exp_deg', 'tmp'],
+                                 header=0)
+        if 'tmp' in raw_coords.columns: raw_coords.drop('tmp', axis=1, inplace=True)
+                                 
+        with open(f"{self.output}.edge", 'r') as f:
+            for line in f:
+                if "mu:" in line:
+                    mu = float(line.split(":")[-1].strip())
+                    break
+
+        id_map = nx.get_node_attributes(G, 'original_id')
+        ordered_ids = [id_map[i] for i in range(N_real)]
+        
+        raw_coords['vertex'] = raw_coords['vertex'].astype(str)
+        if not raw_coords['vertex'].iloc[0].startswith('v'):
+            raw_coords['vertex'] = 'v' + raw_coords['vertex']
+        
+        self.coords = raw_coords.set_index('vertex').loc[ordered_ids].reset_index()
+        
+        node_degrees = np.array([G.degree(i) for i in range(self.N)])
+        self.degrees = node_degrees
+        max_deg = np.max(node_degrees)
+        avg_deg = np.mean(node_degrees)
+        second_moment = np.mean(np.square(node_degrees))
         variance = second_moment - avg_deg**2
         
         self.second_moment = second_moment
         self.first_moment = avg_deg
         
         print(max_deg, avg_deg)
-        #self.label += f"_(k_max={max_deg}_k_avg={avg_deg:.2f})"
+        
+        if self.gamma > 2:
+            exponent = (2-self.gamma)/(self.gamma-1)
+            k_0 = (1-1/old_N) * (self.gamma-2) * self.mean_degree / ((self.gamma-1) * (1-old_N**exponent))
+            
+            self.HypR = 2* np.log(old_N/(np.pi * mu*k_0*k_0))
 
-        #pos_dict = nx.circular_layout(G)
-        #self.positions = np.array([pos_dict[i] for i in range(self.N)])
-        
-        
-        #edges = [(int(i[1:]), int(j[1:]), self.J) for i, j in G.edges()]
+
         edges = [(i, j, self.J) for i, j in G.edges()]
         if self.noise!=0:
             epsilon = np.random.uniform(-self.noise, self.noise, size=self.N)
         else:
             epsilon = np.zeros(self.N)
-            
+        
             
         return edges, epsilon
   

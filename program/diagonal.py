@@ -114,6 +114,43 @@ def compute_load_eigenvalues(self, folder="../spectra", force=False, save=True):
     #print(f"Saved spectrum to {path}")
 
     return evals, ground_energy, ground_state
+    
+    
+    
+    
+def compute_save_eigenvectors(self, folder="../spectra"):
+    import scipy.linalg as la
+    import os
+    from datetime import datetime
+    
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    
+    print("Diagonalising Hamiltonian...")
+
+    H = self.build_hamiltonian()
+
+    # --- full spectrum ---
+    evals, evecs = la.eigh(H.toarray())
+    
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+        
+    file_path = os.path.join(folder, f"SPECTRA_{run_id}_b{self.beta}_g{self.gamma}_N{self.N}.npz")
+    
+    # We save everything needed to reconstruct the physics and the geometry
+    np.savez_compressed(
+        file_path,
+        eigenvalues=evals,     # Vector of length N
+        eigenvectors=evecs,     # Matrix of size N x N
+        radius=self.coords['radius'].values,
+        theta=self.coords['theta'].values,
+        degrees=np.array(self.degrees),
+    )
+    print(f"Spectral data saved to {file_path}")
+    
+    
+
+
 
 
 

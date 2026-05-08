@@ -64,17 +64,17 @@ def main():
     
     dim=1
     beta=10.01
-    mean_degree=[10,15,20,25,30,40]
-    num_samples=10
+    mean_degree=15
+    num_samples=1
     nodes=[4000]
     N=4000
     
     
-    for k in mean_degree:
-        gamma=2.01
+    for N in nodes:
+        gamma=8.01
         while gamma < 8.02:
-            beta = 10.01
-            while beta < 10.02:
+            beta = 1.21
+            while beta < 1.22:
                 for i in range(num_samples):
 
                     g = ut.HyperbolicSD(
@@ -82,7 +82,7 @@ def main():
                         dim=dim,
                         beta=beta,
                         gamma=gamma,
-                        mean_degree=k,
+                        mean_degree=mean_degree,
                         output=f"../input/hyper_N_{N}_d_{dim}_b_{beta}_g_{gamma}_k_{mean_degree}_n_{noise}_{i}",
                         noise=noise,
                         it=i
@@ -91,13 +91,16 @@ def main():
                     
                     start_time = time.time()
                     # --- COMPUTE ---
-                    eigenvalues, E0, vec0 = g.compute_eigenvalues(folder="../spectra/SD", force=True, save=True)
+                    #eigenvalues, E0, vec0 = g.compute_eigenvalues(folder="../spectra/SD", force=True, save=True)
 
-                    g.gap_ratio_unfolded(density_threshold=0.05, window_size=11)
-                    g.compute_conden(fillings, T_min, T_max)
+                    #g.gap_ratio_unfolded(density_threshold=0.05, window_size=11)
+                    #g.compute_conden(fillings, T_min, T_max)
 
-                    # --- SAVE ONLY WHAT YOU NEED ---
-                    g.append_network_log(filename="log_k_TC.csv", dist_filename="dist_k_TC.csv")
+
+                    #g.append_network_log(filename="log_k_TC.csv", dist_filename="dist_k_TC.csv")
+                    
+                    g.compute_eigenvectors(folder="../spectra")
+                    eigenvalues, E0, vec0 =0,0,0
                     
                     end_time = time.time()
                     duration = end_time - start_time
@@ -109,7 +112,7 @@ def main():
 
                 beta += 8
             print(f"\n\n Done for {gamma} value.\n\n")
-            gamma += 0.5
+            gamma += 8
     
 
 

@@ -7,7 +7,7 @@ import pandas as pd
 
 import graph_gen as gg
 from hamiltonian import build_sparse_hamiltonian
-from diagonal import diagonalise_and_analyse, compute_load_eigenvalues, compute_gap_ratio, compute_gap_ratio_unfolded, compute_ground_state_metrics
+from diagonal import diagonalise_and_analyse, compute_load_eigenvalues, compute_save_eigenvectors, compute_gap_ratio, compute_gap_ratio_unfolded, compute_ground_state_metrics
 from plots import plot_gap_rat, plot_gro_sta, plot_n0_Tc_from_data
 from plot_hypermap import plot_ground_hyper, plot_ground_hyper_simple
 from condensate import compute_n0_Tc
@@ -43,6 +43,9 @@ class DeterministicGraph(BaseGraph):
 
     def compute_eigenvalues(self, folder="../spectra", force=False, save=True):
         return compute_load_eigenvalues(self, folder=folder, force=force, save=save)
+        
+    def compute_eigenvectors(self, folder="../spectra"):
+        return compute_save_eigenvectors(self, folder=folder)
 
 
     def compute_idos(self, k=150):
